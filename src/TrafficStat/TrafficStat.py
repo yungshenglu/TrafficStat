@@ -32,7 +32,7 @@ class TrafficStat:
             self.allIpAddr = self.sortIpAddr('all')
 
             # Get the timestamp from the PCAP file
-            #self.timestamp = self.getTimestamp()
+            self.pktTimestamp = self.getTimestamp()
             
         else:
             self.srcIpAddr = set()
@@ -129,16 +129,16 @@ class TrafficStat:
                 pktTimestamp.append(pktTs)
         return pktTimestamp
 
-    def getArrivalRate(self):
-        pktTimestamp = self.getTimestamp()
-        pktArrivalCount = {}
-        for timestamp in pktTimestamp:
-            if (timestamp['src'] in pktArrivalCount):
-                pktArrivalCount[timestamp['src']].append(timestamp['ts'])
+    def getPktArrival(self):
+        pktArrival = {}
+        for pkt in self.pktTimestamp:
+            if (pkt['src'] in pktArrival):
+                pktArrival[pkt['src']].append(pkt['ts'])
             else:
-                pktArrivalCount[timestamp['src']] = list(timestamp['ts'])
-        
-        # Sort the count of arrival by IP address
-        pktArrivalCount = col.OrderedDict(sorted(pktArrivalCount.items()))
+                pktArrival[pkt['src']] = []
+                pktArrival[pkt['src']].append(pkt['ts'])
 
-        return pktArrivalCount
+        # Sort the timestamp of arrival
+        for arrivalTs in pktArrival:
+            sorted(arrivalTs)
+        return pktArrival
