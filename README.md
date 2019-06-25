@@ -1,6 +1,6 @@
 # TrafficStat
 
-This repository is going to implement a simple statisitc tool for PCAP
+This repository is going to implement a simple packets processing tool for multiple PCAP files.
 
 ---
 ## Installation
@@ -18,7 +18,9 @@ This repository is going to implement a simple statisitc tool for PCAP
 ---
 ## Example Usage
 
-1. Run [`test.py`](src/test/test.py)
+1. Put the PCAP files in the folder [`src/input`](src/input/)
+    * You can use the dataset called [USTC-TFC2016](https://github.com/yungshenglu/USTC-TFC2016) in my another repository
+2. Run [`test.py`](src/test/test.py)
 
 ---
 ## Contributor
