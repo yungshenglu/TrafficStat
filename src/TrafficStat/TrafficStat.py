@@ -22,22 +22,18 @@ class TrafficStat:
                 self.pcapFiles = self.readFromFile(self.targetPath)
 
             # Get the unique IP address from PCAP files
-            self.srcIpAddr = self.getIpAddr('src')
-            self.dstIpAddr = self.getIpAddr('dst')
-            self.allIpAddr = self.getIpAddr('all')
+            self.srcIpAddrSet = self.getIpAddrSet('src')
+            self.dstIpAddrSet = self.getIpAddrSet('dst')
 
             # Sort the IP address
             self.srcIpAddr = self.sortIpAddr('src')
             self.dstIpAddr = self.sortIpAddr('dst')
-            self.allIpAddr = self.sortIpAddr('all')
 
             # Get the timestamp from the PCAP file
-            self.pktTimestamp = self.getTimestamp()
-            
+            self.pktTimestamp = self.getIpTimestamp()
         else:
             self.srcIpAddr = set()
             self.dstIpAddr = set()
-            self.allIpAddr = set()
         
 
     def isPathValid(self, path):
@@ -45,9 +41,19 @@ class TrafficStat:
             raise ValueError('[ERROR] The path is invalid or not exist')
         return True
     
-    def isIpAddrTypeValid(self, addrType):
-        if (addrType != 'src' and addrType != 'dst' and addrType != 'all'):
-            raise ValueError('[ERROR] The type of IP address is incorrect')
+    def isAddrTypeValid(self, addrType):
+        if (addrType != 'src' and addrType != 'dst'):
+            raise ValueError('[ERROR] The type of address is incorrect')
+        return True
+
+    def isPortTypeValid(self, portType):
+        if (portType != 's' and portType != 'd'):
+            raise ValueError('[ERROR] The type of port is incorrect')
+        return True
+
+    def isLayerExist(self, packet, layer):
+        if (not packet.haslayer(layer)):
+            raise ValueError('[ERROR] ' + layer + ' not exist')
         return True
 
     def pathType(self, path):
@@ -74,8 +80,8 @@ class TrafficStat:
     
     def readFromFile(self, path):
         if (self.isPathValid(path)):
-            pcap = {}
             print('[INFO] Read the PCAP file: %s' % path)
+            pcap = {}
             pcap['filename'] = path
             pcap['packets'] = rdpcap(pcap['filename'])
             return [pcap]
@@ -83,42 +89,108 @@ class TrafficStat:
     def getTotalPackets(self):
         return len(self.pcapFiles)
 
-    def getIpAddr(self, addrType='src'):
-        if (self.isIpAddrTypeValid(addrType)):
-            ipAddr = set()
+    def getEthType(self):
+        ethType = []
+        for pcap in self.pcapFiles:
+            for pkt in pcap['packets']:
+                if (self.isLayerExist(pkt, 'Ethernet')):
+                    ethType.append(pkt['Ethernet'].type)
+        return ethType
+
+    def getEthAddr(self, addrType='src'):
+        if (self.isAddrTypeValid(addrType)):
+            ethAddr = []
             for pcap in self.pcapFiles:
                 for pkt in pcap['packets']:
-                    if (addrType == 'src'):
-                        ipAddr.add(pkt['IP'].src)
-                    elif (addrType == 'dst'):
-                        ipAddr.add(pkt['IP'].dst)
-                    elif (addrType == 'all'):
-                        ipAddr.add(pkt['IP'].src)
-                        ipAddr.add(pkt['IP'].dst)
+                    if (self.isLayerExist(pkt, 'Ethernet')):
+                        if (addrType == 'src'):
+                            ethAddr.append(pkt['Ethernet'].src)
+                        elif (addrType == 'dst'):
+                            ethAddr.append(pkt['Ethernet'].dst)
+            return ethAddr
+
+    def getIpVersion(self):
+        ipVersion = []
+        for pcap in self.pcapFiles:
+            for pkt in pcap['packets']:
+                if (self.isLayerExist(pkt, 'IP')):
+                    ipVersion.append(pkt['IP'].version)
+        return ipVersion
+
+    def getIpAddr(self, addrType='src'):
+        if (self.isAddrTypeValid(addrType)):
+            ipAddr = []
+            for pcap in self.pcapFiles:
+                for pkt in pcap['packets']:
+                    if (self.isLayerExist(pkt, 'IP')):
+                        if (addrType == 'src'):
+                            ipAddr.append(pkt['IP'].src)
+                        elif (addrType == 'dst'):
+                            ipAddr.append(pkt['IP'].dst)
             return ipAddr
     
-    def sortIpAddr(self, addrType='src'):
-        ipAddr = []
-        if (self.isIpAddrTypeValid(addrType)):
-            if (addrType == 'src'):
-                ipAddr = list(self.srcIpAddr)
-            elif (addrType == 'dst'):
-                ipAddr = list(self.dstIpAddr)
-            elif (addrType == 'all'):
-                ipAddr = list(self.allIpAddr)
-
-        # Sort the IP address
-        sortedIpAddr = []
-        for ip in sorted(ipAddr, key=lambda ip: (
-            int(ip.split('.')[0]), 
-            int(ip.split('.')[1]),
-            int(ip.split('.')[2]),
-            int(ip.split('.')[3]))):
-            sortedIpAddr.append(ip)
-        return set(sortedIpAddr)
+    def getIpAddrSet(self, addrType='src'):
+        if (self.isAddrTypeValid(addrType)):
+            ipAddrSet = set()
+            for pcap in self.pcapFiles:
+                for pkt in pcap['packets']:
+                    if (self.isLayerExist(pkt, 'IP')):
+                        if (addrType == 'src'):
+                            ipAddrSet.add(pkt['IP'].src)
+                        elif (addrType == 'dst'):
+                            ipAddrSet.add(pkt['IP'].dst)
+            return ipAddrSet
     
+    def sortIpAddr(self, addrType='src'):
+        if (self.isAddrTypeValid(addrType)):
+            ipAddr = []
+            if (addrType == 'src'):
+                ipAddr = list(ipAddr)
+            elif (addrType == 'dst'):
+                ipAddr = list(ipAddr)
+            
+            sortedIpAddr = []
+            for ip in sorted(ipAddr, key=lambda ip: (
+                int(ip.split('.')[0]), 
+                int(ip.split('.')[1]),
+                int(ip.split('.')[2]),
+                int(ip.split('.')[3]))):
+                sortedIpAddr.append(ip)
+            return sortedIpAddr
+    
+    def getUdpPort(self, portType='s'):
+        if (self.isPortTypeValid(portType)):
+            udpPort = []
+            for pcap in self.pcapFiles:
+                for pkt in pcap['packets']:
+                    if (self.isLayerExist(pkt, 'UDP')):
+                        if (portType == 's'):
+                            udpPort.append(pkt['UDP'].sport)
+                        elif (portType == 'd'):
+                            udpPort.append(pkt['UDP'].dport)
+            return udpPort
+
+    def getUdpPortSet(self, portType='s'):
+        if (self.isPortTypeValid(portType)):
+            udpPortSet = set()
+            for pcap in self.pcapFiles:
+                for pkt in pcap['packets']:
+                    if (self.isLayerExist(pkt, 'UDP')):
+                        if (portType == 's'):
+                            udpPortSet.add(pkt['UDP'].sport)
+                        elif (portType == 'd'):
+                            udpPortSet.add(pkt['UDP'].dport)
+            return udpPortSet
+
     def getTimestamp(self):
-        pktTimestamp = []
+        timestamp = []
+        for pcap in self.pcapFiles:
+            for pkt in pcap['packets']:
+                timestamp.append(pkt.time)
+        return timestamp
+
+    def getIpTimestamp(self):
+        timestamp = []
         for pcap in self.pcapFiles:
             for pkt in pcap['packets']:
                 pktTs = {
@@ -126,19 +198,5 @@ class TrafficStat:
                     'dst': pkt['IP'].dst,
                     'ts': pkt.time
                 }
-                pktTimestamp.append(pktTs)
-        return pktTimestamp
-
-    def getPktArrival(self):
-        pktArrival = {}
-        for pkt in self.pktTimestamp:
-            if (pkt['src'] in pktArrival):
-                pktArrival[pkt['src']].append(pkt['ts'])
-            else:
-                pktArrival[pkt['src']] = []
-                pktArrival[pkt['src']].append(pkt['ts'])
-
-        # Sort the timestamp of arrival
-        for arrivalTs in pktArrival:
-            sorted(arrivalTs)
-        return pktArrival
+                timestamp.append(pktTs)
+        return timestamp
