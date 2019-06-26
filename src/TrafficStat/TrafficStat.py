@@ -158,6 +158,30 @@ class TrafficStat:
                 sortedIpAddr.append(ip)
             return sortedIpAddr
     
+    def getTcpPort(self, portType='s'):
+        if (self.isPortTypeValid(portType)):
+            tcpPort = []
+            for pcap in self.pcapFiles:
+                for pkt in pcap['packets']:
+                    if (self.isLayerExist(pkt, 'TCP')):
+                        if (portType == 's'):
+                            tcpPort.append(pkt['TCP'].sport)
+                        elif (portType == 'd'):
+                            tcpPort.append(pkt['TCP'].dport)
+            return tcpPort
+
+    def getTcpPortSet(self, portType='s'):
+        if (self.isPortTypeValid(portType)):
+            tcpPortSet = set()
+            for pcap in self.pcapFiles:
+                for pkt in pcap['packets']:
+                    if (self.isLayerExist(pkt, 'TCP')):
+                        if (portType == 's'):
+                            tcpPortSet.add(pkt['TCP'].sport)
+                        elif (portType == 'd'):
+                            tcpPortSet.add(pkt['TCP'].dport)
+            return tcpPortSet
+
     def getUdpPort(self, portType='s'):
         if (self.isPortTypeValid(portType)):
             udpPort = []
