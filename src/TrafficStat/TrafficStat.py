@@ -1,40 +1,44 @@
 #!/usr/bin/python3
 
 from scapy.all import *
+from collections import defaultdict
 import os
 import collections as col
 import ipaddress as ipaddr
 
 
 class TrafficStat:
-    def __init__(self, targetPath='./input/', readFile=True):
-        if (readFile):
-            # Determine whether the type of path is directory or file
-            if (self.isPathValid(targetPath)):
-                self.targetPath = targetPath
-                self.targetPathType = self.pathType(targetPath)
-            
-            # Read PCAP file from specific folder
-            self.pcapFiles = []
-            if (self.targetPathType == 'D'):
-                self.pcapFiles = self.readFromDir(self.targetPath)
-            elif (self.targetPathType == 'F'):
-                self.pcapFiles = self.readFromFile(self.targetPath)
-
-            # Get the unique IP address from PCAP files
-            self.srcIpAddrSet = self.getIpAddrSet('src')
-            self.dstIpAddrSet = self.getIpAddrSet('dst')
-
-            # Sort the IP address
-            self.srcIpAddr = self.sortIpAddr('src')
-            self.dstIpAddr = self.sortIpAddr('dst')
-
-            # Get the timestamp from the PCAP file
-            self.pktTimestamp = self.getIpTimestamp()
-        else:
-            self.srcIpAddr = set()
-            self.dstIpAddr = set()
+    def __init__(self, targetPath='./input/'):
+        self.subnetMaskPrefix = ['255', '254', '252', '248', '240', '224', '192', '128']
         
+        # Determine whether the type of path is directory or file
+        if (self.isPathValid(targetPath)):
+            self.targetPath = targetPath
+            self.targetPathType = self.pathType(targetPath)
+
+        self.numPackets = []
+        
+        # Read PCAP file from specific folder
+        self.pcapFiles = []
+        if (self.targetPathType == 'D'):
+            self.pcapFiles = self.readFromDir(self.targetPath)
+        elif (self.targetPathType == 'F'):
+            self.pcapFiles = self.readFromFile(self.targetPath)
+
+        # Get the unique IP address from PCAP files
+        self.srcIpAddrSet = self.getIpAddrSet('src')
+        self.dstIpAddrSet = self.getIpAddrSet('dst')
+
+        # Sort the IP address
+        self.srcIpAddr = self.sortIpAddr('src')
+        self.dstIpAddr = self.sortIpAddr('dst')
+
+        # Get the timestamp from the PCAP file
+        self.pktTimestamp = self.getIpTimestamp()
+
+        # Get th global time
+        self.startTime, self.endTime = self.getGlobalTime()
+        self.interval = self.endTime - self.startTime
 
     def isPathValid(self, path):
         if (not os.path.exists(path)):
@@ -75,6 +79,7 @@ class TrafficStat:
                         print('[INFO] Read the PCAP file: %s' % fname)
                         pcap['filename'] = os.path.join(root, fname)
                         pcap['packets'] = rdpcap(pcap['filename'])
+                    self.numPackets.append(len(pcap))
                     pcapFiles.append(pcap)
             return pcapFiles
     
@@ -206,6 +211,10 @@ class TrafficStat:
                             udpPortSet.add(pkt['UDP'].dport)
             return udpPortSet
 
+    def getGlobalTime(self):
+        timestamp = self.getTimestamp()
+        return min(timestamp), max(timestamp)
+
     def getTimestamp(self):
         timestamp = []
         for pcap in self.pcapFiles:
@@ -224,3 +233,72 @@ class TrafficStat:
                 }
                 timestamp.append(pktTs)
         return timestamp
+
+    def getIpArrival(self):
+        arrivalTimestamp = {}
+        for pcap in self.pcapFiles:
+            for pkt in pcap['packets']:
+                if (pkt['IP'].src in arrivalTimestamp):
+                    arrivalTimestamp[pkt['IP'].src].append(pkt.time)
+                else:
+                    arrivalTimestamp[pkt['IP'].src] = []
+                    arrivalTimestamp[pkt['IP'].src].append(pkt.time)
+        for pcap in self.pcapFiles:
+            for pkt in pcap['packets']:
+                sorted(arrivalTimestamp[pkt['IP'].src])
+        return arrivalTimestamp
+
+    def getIpArrivalRate(self):
+        arrivalTimestamp = self.getIpArrival()
+        arrivalRate = {}
+        for key, value in arrivalTimestamp.items():
+            arrivalRate[key] = len(arrivalTimestamp[key]) / self.interval
+        return arrivalRate
+    
+    def getSubnetMask(self, subnetLength, addrType='src'):
+        if (self.isAddrTypeValid(addrType)):
+            subnetMask = {}
+            for pcap in self.pcapFiles:
+                for pkt in pcap['packets']:
+                    addr = pkt['IP'].src + '/'
+                    for _ in range(3 - int(subnetLength / 8)):
+                        addr += '255.'
+                    addr += self.subnetMaskPrefix[int(subnetLength % 8)]
+                    if (subnetLength > 7):
+                        for _ in range(int(subnetLength / 8)):
+                            addr += '.0' 
+                    net = ipaddr.ip_network(addr, strict=False)
+                    subnetMask[pkt['IP'].src] = str(ipaddr.ip_address(net.network_address))
+            return subnetMask
+
+    def countSubnetMask(self, subnetLength, addrType='src'):
+        # Get the subnet mask of each IP address
+        subnetMask = self.getSubnetMask(subnetLength, addrType)
+        # Statisitc
+        if (self.isAddrTypeValid(addrType)):
+            subnetMaskCounter = defaultdict(int)
+            for key, value in subnetMask.items():
+                subnetMaskCounter[value] += 1
+            return subnetMaskCounter
+
+    def getSubnetMaskArrival(self, subnetLength, addrType='src'):
+        ipSubnetMask = self.getSubnetMask(subnetLength, addrType)
+        arrivalTimestamp = {}
+        for pcap in self.pcapFiles:
+            for pkt in pcap['packets']:
+                if (ipSubnetMask[pkt['IP'].src] in arrivalTimestamp):
+                    arrivalTimestamp[ipSubnetMask[pkt['IP'].src]].append((pkt.time - self.startTime)*1000)
+                else:
+                    arrivalTimestamp[ipSubnetMask[pkt['IP'].src]] = []
+                    arrivalTimestamp[ipSubnetMask[pkt['IP'].src]].append((pkt.time - self.startTime)*1000)
+        for pcap in self.pcapFiles:
+            for pkt in pcap['packets']:
+                sorted(arrivalTimestamp[ipSubnetMask[pkt['IP'].src]])
+        return arrivalTimestamp
+    
+    def getSubnetMaskArrivalRate(self, subnetLength, addrType='src'):
+        arrivalTimestamp = self.getSubnetMaskArrival(subnetLength, addrType)
+        arrivalRate = {}
+        for key, value in arrivalTimestamp.items():
+            arrivalRate[key] = len(arrivalTimestamp[key]) / self.interval
+        return arrivalRate
